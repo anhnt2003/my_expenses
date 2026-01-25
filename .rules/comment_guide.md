@@ -1,0 +1,8 @@
+- Use comments sparingly, and when you do, make them meaningful.
+- All comments MUST use block-style opening and closing brackets: /* comment */.
+- Do NOT use single-line comment syntax such as // or #.
+- Don't comment on obvious things. Excessive, redundant, or unclear comments clutter the codebase and quickly become outdated.
+- Use comments to explain the "why" behind decisions, not to restate what the code is doing.
+- Use comments to document unusual behavior, edge cases, workarounds, and potential pitfalls.
+- Ensure comments are kept up to date when the related code changes.
+- If the language does not support /* */ comments, do not add comments.
