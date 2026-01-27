@@ -56,7 +56,7 @@ class ColorPicker extends StatelessWidget {
         final color = colorList[index];
         final isSelected = _colorsAreEqual(color, selectedColor);
         return _ColorItem(
-          key: ValueKey(color.value),
+          key: ValueKey(color.toARGB32()),
           color: color,
           isSelected: isSelected,
           onTap: () => onColorSelected(color),
@@ -66,7 +66,7 @@ class ColorPicker extends StatelessWidget {
   }
 
   bool _colorsAreEqual(Color a, Color b) {
-    return a.value == b.value;
+    return a.toARGB32() == b.toARGB32();
   }
 }
 

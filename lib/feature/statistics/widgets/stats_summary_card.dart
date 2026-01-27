@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:my_expenses/core/constants/app_colors.dart';
 import 'package:my_expenses/core/constants/app_sizes.dart';
 import 'package:my_expenses/core/constants/app_strings.dart';
+import 'package:my_expenses/core/utils/currency_formatter.dart';
 
 /// A card widget for displaying statistics summary.
 ///
@@ -177,7 +178,7 @@ class StatsSummaryRow extends StatelessWidget {
       children: [
         StatsSummaryCard(
           title: AppStrings.statsTotal,
-          value: '${AppStrings.currencySymbol}${total.toStringAsFixed(2)}',
+          value: CurrencyFormatter.format(total),
           subtitle: 'All time spending',
           icon: Icons.account_balance_wallet_rounded,
           trend: TrendDirection.up,
@@ -189,8 +190,7 @@ class StatsSummaryRow extends StatelessWidget {
             Expanded(
               child: StatsSummaryCard(
                 title: AppStrings.statsAverage,
-                value:
-                    '${AppStrings.currencySymbol}${average.toStringAsFixed(2)}',
+                value: CurrencyFormatter.format(average),
                 subtitle: 'Per transaction',
                 icon: Icons.analytics_rounded,
               ),
@@ -199,8 +199,7 @@ class StatsSummaryRow extends StatelessWidget {
             Expanded(
               child: StatsSummaryCard(
                 title: AppStrings.statsHighest,
-                value:
-                    '${AppStrings.currencySymbol}${highest.toStringAsFixed(2)}',
+                value: CurrencyFormatter.format(highest),
                 subtitle: 'Largest expense',
                 icon: Icons.arrow_upward_rounded,
               ),

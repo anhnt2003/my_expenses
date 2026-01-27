@@ -1,36 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/categories/widgets/category_form_dialog.dart';
-import 'package:my_expenses/feature/categories/widgets/category_tile.dart';
-import 'package:my_expenses/shared/widgets/empty_state_widget.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The main categories screen.
-///
-/// Features:
-/// - List of all categories
-/// - Add category FAB
-/// - Edit/delete actions (visual only)
-class CategoriesScreen extends StatefulWidget {
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../domain/entities/category.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
+import '../../expenses/providers/expenses_provider.dart';
+import '../../../domain/entities/expense.dart';
+import '../providers/categories_provider.dart';
+import '../widgets/category_form_dialog.dart';
+import '../widgets/category_tile.dart';
+
+/* Categories screen with real provider data and CRUD operations */
+
+class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
 
   @override
-  State<CategoriesScreen> createState() => _CategoriesScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoriesAsync = ref.watch(categoriesListProvider);
+    final expensesAsync = ref.watch(expensesListProvider);
 
-class _CategoriesScreenState extends State<CategoriesScreen> {
-  List<MockCategory> _categories = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _categories = List.from(MockData.categories);
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.categoriesTitle),
@@ -41,10 +33,26 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         ),
       ),
       body: SafeArea(
-        child: _categories.isEmpty ? _buildEmptyState() : _buildCategoryList(),
+        child: categoriesAsync.when(
+          loading: () => const Center(child: AppLoadingWidget()),
+          error: (error, _) => Center(child: Text('Error: $error')),
+          data: (result) => result.fold(
+            (failure) => Center(child: Text('Error: ${failure.message}')),
+            (categories) => categories.isEmpty
+                ? _buildEmptyState(context)
+                : expensesAsync.maybeWhen(
+                    data: (expResult) {
+                      final expenses = expResult.getOrElse((_) => []);
+                      return _buildCategoryList(
+                          context, ref, categories, expenses);
+                    },
+                    orElse: () => const Center(child: AppLoadingWidget()),
+                  ),
+          ),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddDialog(),
+        onPressed: () => CategoryFormDialog.show(context),
         icon: const Icon(Icons.add_rounded),
         label: const Text(AppStrings.categoriesAddNew),
         heroTag: 'categories_fab',
@@ -52,28 +60,34 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return EmptyStateWidget(
       icon: Icons.category_rounded,
       message: AppStrings.categoriesNoCategories,
       description: AppStrings.categoriesNoCategoriesDesc,
       actionLabel: AppStrings.categoriesAddNew,
-      onAction: () => _showAddDialog(),
+      onAction: () => CategoryFormDialog.show(context),
     );
   }
 
-  Widget _buildCategoryList() {
+  Widget _buildCategoryList(
+    BuildContext context,
+    WidgetRef ref,
+    List<Category> categories,
+    List<Expense> expenses,
+  ) {
     return ListView.builder(
       padding: const EdgeInsets.only(
         left: AppSizes.md,
         right: AppSizes.md,
         top: AppSizes.md,
-        bottom: AppSizes.xxl + AppSizes.xl, // Extra padding for FAB
+        bottom: AppSizes.xxl + AppSizes.xl,
       ),
-      itemCount: _categories.length,
+      itemCount: categories.length,
       itemBuilder: (context, index) {
-        final category = _categories[index];
-        final expenseCount = _getExpenseCount(category);
+        final category = categories[index];
+        final expenseCount =
+            expenses.where((e) => e.categoryId == category.id).length;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: AppSizes.sm),
@@ -81,79 +95,55 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             key: ValueKey(category.id),
             category: category,
             expenseCount: expenseCount,
-            onTap: () => _showEditDialog(category),
-            onEdit: () => _showEditDialog(category),
-            onDelete: () => _showDeleteConfirmation(category),
+            onTap: () => CategoryFormDialog.show(context, category: category),
+            onEdit: () => CategoryFormDialog.show(context, category: category),
+            onDelete: category.isDefault
+                ? null
+                : () => _showDeleteConfirmation(context, ref, category),
           ),
         );
       },
     );
   }
 
-  int _getExpenseCount(MockCategory category) {
-    return MockData.expenses.where((e) => e.category.id == category.id).length;
-  }
-
-  void _showAddDialog() {
-    CategoryFormDialog.show(context);
-  }
-
-  void _showEditDialog(MockCategory category) {
-    CategoryFormDialog.show(context, category: category);
-  }
-
-  void _showDeleteConfirmation(MockCategory category) {
-    final expenseCount = _getExpenseCount(category);
-
+  void _showDeleteConfirmation(
+    BuildContext context,
+    WidgetRef ref,
+    Category category,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text(AppStrings.formDelete),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Are you sure you want to delete "${category.name}"?'),
-            if (expenseCount > 0) ...[
-              const SizedBox(height: AppSizes.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSizes.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  borderRadius: AppSizes.borderRadiusSm,
-                  border: Border.all(
-                    color: AppColors.warning.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: AppColors.warning,
-                      size: AppSizes.iconMd,
-                    ),
-                    const SizedBox(width: AppSizes.sm),
-                    Expanded(
-                      child: Text(
-                        'This category has $expenseCount expense${expenseCount > 1 ? 's' : ''} associated with it.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
+        content: Text('Are you sure you want to delete "${category.name}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text(AppStrings.commonNo),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteCategory(category);
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final result = await ref
+                  .read(categoriesNotifierProvider.notifier)
+                  .deleteCategory(category.id);
+              if (context.mounted) {
+                result.fold(
+                  (failure) => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${failure.message}'),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: AppColors.error,
+                    ),
+                  ),
+                  (_) => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('"${category.name}" deleted successfully!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  ),
+                );
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: AppColors.error,
@@ -161,22 +151,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             child: const Text(AppStrings.commonYes),
           ),
         ],
-      ),
-    );
-  }
-
-  void _deleteCategory(MockCategory category) {
-    // Visual only - just show snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('"${category.name}" deleted successfully!'),
-        behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            // Visual only - would restore category
-          },
-        ),
       ),
     );
   }

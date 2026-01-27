@@ -1,24 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/expenses/widgets/category_selector.dart';
-import 'package:my_expenses/feature/expenses/widgets/date_picker_field.dart';
-import 'package:my_expenses/shared/widgets/custom_button.dart';
-import 'package:my_expenses/shared/widgets/custom_text_field.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// A reusable form widget for adding or editing expenses.
-///
-/// Features:
-/// - Title, amount, category, date, and note fields
-/// - Form validation UI (visual only)
-/// - Can be used in both add and edit screens
-class ExpenseForm extends StatefulWidget {
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../domain/entities/category.dart';
+import '../../../shared/widgets/custom_button.dart';
+import '../../../shared/widgets/custom_text_field.dart';
+import '../../categories/providers/categories_provider.dart';
+import '../providers/expenses_provider.dart';
+import 'category_selector.dart';
+import 'date_picker_field.dart';
+
+/* A reusable form widget for adding or editing expenses with real data */
+
+class ExpenseForm extends ConsumerStatefulWidget {
   const ExpenseForm({
     super.key,
     this.initialTitle,
     this.initialAmount,
-    this.initialCategory,
+    this.initialCategoryId,
     this.initialDate,
     this.initialNote,
     this.onSave,
@@ -27,25 +28,26 @@ class ExpenseForm extends StatefulWidget {
 
   final String? initialTitle;
   final double? initialAmount;
-  final MockCategory? initialCategory;
+  final String? initialCategoryId;
   final DateTime? initialDate;
   final String? initialNote;
   final VoidCallback? onSave;
   final bool isEditing;
 
   @override
-  State<ExpenseForm> createState() => _ExpenseFormState();
+  ConsumerState<ExpenseForm> createState() => _ExpenseFormState();
 }
 
-class _ExpenseFormState extends State<ExpenseForm> {
+class _ExpenseFormState extends ConsumerState<ExpenseForm> {
   late final TextEditingController _titleController;
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
 
-  MockCategory? _selectedCategory;
+  Category? _selectedCategory;
   DateTime? _selectedDate;
+  bool _isSubmitting = false;
 
-  // Form validation state (visual only)
+  /* Form validation state */
   String? _titleError;
   String? _amountError;
   String? _categoryError;
@@ -59,7 +61,6 @@ class _ExpenseFormState extends State<ExpenseForm> {
       text: widget.initialAmount?.toStringAsFixed(2),
     );
     _noteController = TextEditingController(text: widget.initialNote);
-    _selectedCategory = widget.initialCategory;
     _selectedDate = widget.initialDate ?? DateTime.now();
   }
 
@@ -74,13 +75,14 @@ class _ExpenseFormState extends State<ExpenseForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final categoriesAsync = ref.watch(categoriesListProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSizes.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title field
+          /* Title field */
           CustomTextField(
             controller: _titleController,
             label: AppStrings.formTitle,
@@ -92,7 +94,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
           const SizedBox(height: AppSizes.lg),
 
-          // Amount field
+          /* Amount field */
           CurrencyTextField(
             controller: _amountController,
             label: AppStrings.formAmount,
@@ -102,7 +104,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
           const SizedBox(height: AppSizes.lg),
 
-          // Category selector
+          /* Category selector */
           Text(
             AppStrings.formCategory,
             style: theme.textTheme.labelLarge,
@@ -117,19 +119,38 @@ class _ExpenseFormState extends State<ExpenseForm> {
             ),
             const SizedBox(height: AppSizes.xs),
           ],
-          CategorySelector(
-            categories: MockData.categories,
-            selectedCategory: _selectedCategory,
-            onCategorySelected: (category) {
-              setState(() {
-                _selectedCategory = category;
-                _categoryError = null;
-              });
-            },
+          categoriesAsync.when(
+            loading: () => const Center(child: AppLoadingWidget()),
+            error: (error, _) => Text('Error loading categories: $error'),
+            data: (result) => result.fold(
+              (failure) => Text('Error: ${failure.message}'),
+              (categories) {
+                /* Set initial category if provided */
+                if (_selectedCategory == null &&
+                    widget.initialCategoryId != null) {
+                  try {
+                    _selectedCategory = categories.firstWhere(
+                      (c) => c.id == widget.initialCategoryId,
+                    );
+                  } catch (_) {}
+                }
+
+                return CategorySelector(
+                  categories: categories,
+                  selectedCategory: _selectedCategory,
+                  onCategorySelected: (category) {
+                    setState(() {
+                      _selectedCategory = category;
+                      _categoryError = null;
+                    });
+                  },
+                );
+              },
+            ),
           ),
           const SizedBox(height: AppSizes.lg),
 
-          // Date picker
+          /* Date picker */
           if (_dateError != null) ...[
             Text(
               _dateError!,
@@ -153,7 +174,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
           const SizedBox(height: AppSizes.lg),
 
-          // Note field
+          /* Note field */
           CustomTextField(
             controller: _noteController,
             label: AppStrings.formNote,
@@ -164,14 +185,16 @@ class _ExpenseFormState extends State<ExpenseForm> {
           ),
           const SizedBox(height: AppSizes.xl),
 
-          // Save button
+          /* Save button */
           SizedBox(
             width: double.infinity,
-            child: CustomButton(
-              onPressed: _handleSave,
-              label: AppStrings.formSave,
-              icon: Icons.check_rounded,
-            ),
+            child: _isSubmitting
+                ? const Center(child: AppLoadingWidget())
+                : CustomButton(
+                    onPressed: _handleSave,
+                    label: AppStrings.formSave,
+                    icon: Icons.check_rounded,
+                  ),
           ),
           const SizedBox(height: AppSizes.md),
         ],
@@ -192,8 +215,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
     });
   }
 
-  void _handleSave() {
-    // Validate form (visual only)
+  Future<void> _handleSave() async {
+    /* Validate form */
     bool isValid = true;
 
     if (_titleController.text.trim().isEmpty) {
@@ -222,24 +245,49 @@ class _ExpenseFormState extends State<ExpenseForm> {
       isValid = false;
     }
 
-    if (isValid) {
-      // Visual only - just call the callback
-      widget.onSave?.call();
+    if (!isValid) return;
 
-      // Show success feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.isEditing
-                ? 'Expense updated successfully!'
-                : 'Expense added successfully!',
+    setState(() => _isSubmitting = true);
+
+    /* Save the expense */
+    final result = await ref.read(expensesNotifierProvider.notifier).addExpense(
+          title: _titleController.text.trim(),
+          amount: double.parse(_amountController.text),
+          date: _selectedDate!,
+          categoryId: _selectedCategory!.id,
+          note: _noteController.text.trim().isNotEmpty
+              ? _noteController.text.trim()
+              : null,
+        );
+
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = false);
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${failure.message}'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
           ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // Pop the screen
-      Navigator.of(context).pop();
-    }
+        );
+      },
+      (_) {
+        widget.onSave?.call();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.isEditing
+                  ? 'Expense updated successfully!'
+                  : 'Expense added successfully!',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop();
+      },
+    );
   }
 }

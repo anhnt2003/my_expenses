@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
 
-/// A tile widget for displaying a single category item.
-///
-/// Features:
-/// - Category icon and color display
-/// - Name and expense count
-/// - Edit/delete action buttons
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../domain/entities/category.dart';
+
+/* A tile widget for displaying a single category item */
+
 class CategoryTile extends StatelessWidget {
   const CategoryTile({
     super.key,
@@ -20,7 +17,7 @@ class CategoryTile extends StatelessWidget {
     this.onDelete,
   });
 
-  final MockCategory category;
+  final Category category;
   final int expenseCount;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
@@ -83,13 +80,36 @@ class CategoryTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          category.name,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                category.name,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (category.isDefault)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.xs,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.info.withValues(alpha: 0.1),
+                  borderRadius: AppSizes.borderRadiusSm,
+                ),
+                child: Text(
+                  'Default',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.info,
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: AppSizes.xs),
         Text(
@@ -116,16 +136,17 @@ class CategoryTile extends StatelessWidget {
           tooltip: AppStrings.categoriesEdit,
           visualDensity: VisualDensity.compact,
         ),
-        IconButton(
-          icon: const Icon(
-            Icons.delete_outline_rounded,
-            color: AppColors.error,
-            size: AppSizes.iconMd,
+        if (onDelete != null)
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.error,
+              size: AppSizes.iconMd,
+            ),
+            onPressed: onDelete,
+            tooltip: AppStrings.formDelete,
+            visualDensity: VisualDensity.compact,
           ),
-          onPressed: onDelete,
-          tooltip: AppStrings.formDelete,
-          visualDensity: VisualDensity.compact,
-        ),
       ],
     );
   }

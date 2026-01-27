@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/loading_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/home/widgets/expense_summary_card.dart';
-import 'package:my_expenses/feature/home/widgets/recent_expenses_list.dart';
-import 'package:my_expenses/feature/home/widgets/quick_add_fab.dart';
-import 'package:my_expenses/router/route_names.dart';
+
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../router/route_names.dart';
+import '../../../shared/widgets/error_widget.dart' as app;
+import '../providers/home_provider.dart';
+import '../widgets/expense_summary_card.dart';
+import '../widgets/recent_expenses_list.dart';
+import '../widgets/quick_add_fab.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -32,9 +35,9 @@ class HomeScreen extends ConsumerWidget {
                   children: [
                     _buildGreeting(context, theme),
                     const SizedBox(height: AppSizes.lg),
-                    _buildMainSummaryCard(),
+                    _buildMainSummaryCard(ref),
                     const SizedBox(height: AppSizes.md),
-                    _buildSmallSummaryCards(),
+                    _buildSmallSummaryCards(ref),
                     const SizedBox(height: AppSizes.lg),
                   ],
                 ),
@@ -109,32 +112,92 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMainSummaryCard() {
-    return ExpenseSummaryCard(
-      totalAmount: MockData.thisMonthSpending,
-      periodLabel: AppStrings.homeThisMonth,
-      previousAmount: 450.00,
+  Widget _buildMainSummaryCard(WidgetRef ref) {
+    final monthlyTotal = ref.watch(monthlyTotalProvider);
+
+    return monthlyTotal.when(
+      loading: () => const SizedBox(
+        height: 120,
+        child: Center(child: AppLoadingWidget()),
+      ),
+      error: (error, _) => app.ErrorWidget(
+        message: 'Failed to load monthly total',
+        onRetry: () => ref.invalidate(monthlyTotalProvider),
+      ),
+      data: (result) => result.fold(
+        (failure) => app.ErrorWidget(
+          message: failure.message,
+          onRetry: () => ref.invalidate(monthlyTotalProvider),
+        ),
+        (amount) => ExpenseSummaryCard(
+          totalAmount: amount,
+          periodLabel: AppStrings.homeThisMonth,
+        ),
+      ),
     );
   }
 
-  Widget _buildSmallSummaryCards() {
+  Widget _buildSmallSummaryCards(WidgetRef ref) {
+    final weeklyTotal = ref.watch(weeklyTotalProvider);
+    final todayTotal = ref.watch(todayTotalProvider);
+
     return Row(
       children: [
         Expanded(
-          child: SmallSummaryCard(
-            label: AppStrings.homeThisWeek,
-            amount: MockData.thisWeekSpending,
-            icon: Icons.calendar_today_rounded,
-            iconColor: AppColors.info,
+          child: weeklyTotal.when(
+            loading: () => const SizedBox(
+              height: 100,
+              child: Center(child: AppLoadingWidget()),
+            ),
+            error: (_, __) => const SmallSummaryCard(
+              label: AppStrings.homeThisWeek,
+              amount: 0,
+              icon: Icons.calendar_today_rounded,
+              iconColor: AppColors.info,
+            ),
+            data: (result) => result.fold(
+              (_) => const SmallSummaryCard(
+                label: AppStrings.homeThisWeek,
+                amount: 0,
+                icon: Icons.calendar_today_rounded,
+                iconColor: AppColors.info,
+              ),
+              (amount) => SmallSummaryCard(
+                label: AppStrings.homeThisWeek,
+                amount: amount,
+                icon: Icons.calendar_today_rounded,
+                iconColor: AppColors.info,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: AppSizes.md),
         Expanded(
-          child: SmallSummaryCard(
-            label: AppStrings.homeTotalSpending,
-            amount: MockData.totalSpending,
-            icon: Icons.account_balance_wallet_rounded,
-            iconColor: AppColors.success,
+          child: todayTotal.when(
+            loading: () => const SizedBox(
+              height: 100,
+              child: Center(child: AppLoadingWidget()),
+            ),
+            error: (_, __) => const SmallSummaryCard(
+              label: 'Today',
+              amount: 0,
+              icon: Icons.today_rounded,
+              iconColor: AppColors.success,
+            ),
+            data: (result) => result.fold(
+              (_) => const SmallSummaryCard(
+                label: 'Today',
+                amount: 0,
+                icon: Icons.today_rounded,
+                iconColor: AppColors.success,
+              ),
+              (amount) => SmallSummaryCard(
+                label: 'Today',
+                amount: amount,
+                icon: Icons.today_rounded,
+                iconColor: AppColors.success,
+              ),
+            ),
           ),
         ),
       ],

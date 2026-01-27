@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
 
-/// A tile widget for displaying a single expense item.
-///
-/// Features:
-/// - Category icon with colored background
-/// - Title and amount display
-/// - Date and optional note preview
-/// - Swipe to delete gesture (visual only)
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../domain/entities/expense.dart';
+
+/* A tile widget for displaying a single expense item with swipe-to-delete */
+
 class ExpenseTile extends StatelessWidget {
   const ExpenseTile({
     super.key,
     required this.expense,
+    required this.categoryIcon,
+    required this.categoryColor,
+    required this.categoryName,
     this.onTap,
     this.onDelete,
   });
 
-  final MockExpense expense;
+  final Expense expense;
+  final IconData categoryIcon;
+  final Color categoryColor;
+  final String categoryName;
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
 
@@ -33,7 +36,6 @@ class ExpenseTile extends StatelessWidget {
       key: ValueKey(expense.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) async {
-        // Visual only - always return false to prevent actual dismiss
         onDelete?.call();
         return false;
       },
@@ -102,12 +104,12 @@ class ExpenseTile extends StatelessWidget {
       width: AppSizes.categoryIconSizeLg,
       height: AppSizes.categoryIconSizeLg,
       decoration: BoxDecoration(
-        color: expense.category.color.withValues(alpha: 0.15),
+        color: categoryColor.withValues(alpha: 0.15),
         borderRadius: AppSizes.borderRadiusMd,
       ),
       child: Icon(
-        expense.category.icon,
-        color: expense.category.color,
+        categoryIcon,
+        color: categoryColor,
         size: AppSizes.iconLg,
       ),
     );
@@ -175,7 +177,7 @@ class ExpenseTile extends StatelessWidget {
         borderRadius: AppSizes.borderRadiusSm,
       ),
       child: Text(
-        '-${AppStrings.currencySymbol}${expense.amount.toStringAsFixed(2)}',
+        '-${CurrencyFormatter.format(expense.amount)}',
         style: theme.textTheme.titleMedium?.copyWith(
           color: AppColors.error,
           fontWeight: FontWeight.bold,

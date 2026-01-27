@@ -8,10 +8,6 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/anhnt2003/my_expenses">
-    <img src="docs/images/logo.png" alt="Logo" width="80" height="80">
-  </a>
-
   <h3 align="center">My Expenses</h3>
 
   <p align="center">

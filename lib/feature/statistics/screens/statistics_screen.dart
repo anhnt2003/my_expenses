@@ -1,31 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/statistics/widgets/expense_pie_chart.dart';
-import 'package:my_expenses/feature/statistics/widgets/monthly_bar_chart.dart';
-import 'package:my_expenses/feature/statistics/widgets/stats_summary_card.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The main statistics screen.
-///
-/// Features:
-/// - Period selector (Week, Month, Year)
-/// - Summary stats cards (Total, Average, Highest)
-/// - Category pie chart
-/// - Monthly trend bar chart
-class StatisticsScreen extends StatefulWidget {
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../providers/statistics_provider.dart';
+import '../widgets/expense_pie_chart.dart';
+import '../widgets/monthly_bar_chart.dart';
+import '../widgets/stats_summary_card.dart';
+
+/* Statistics screen with real data from providers */
+
+class StatisticsScreen extends ConsumerWidget {
   const StatisticsScreen({super.key});
 
   @override
-  State<StatisticsScreen> createState() => _StatisticsScreenState();
-}
-
-class _StatisticsScreenState extends State<StatisticsScreen> {
-  String _selectedPeriod = 'month';
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.statsTitle),
@@ -34,14 +25,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildPeriodSelector(context),
+            _buildPeriodSelector(context, ref),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSizes.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSummarySection(),
+                    _buildSummarySection(ref),
                     const SizedBox(height: AppSizes.lg),
                     const ExpensePieChart(),
                     const SizedBox(height: AppSizes.lg),
@@ -57,14 +48,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildPeriodSelector(BuildContext context) {
+  Widget _buildPeriodSelector(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final selectedPeriod = ref.watch(statsPeriodProvider);
 
     final periods = [
-      ('week', AppStrings.statsPeriodWeek),
-      ('month', AppStrings.statsPeriodMonth),
-      ('year', AppStrings.statsPeriodYear),
+      (StatsPeriod.week, AppStrings.statsPeriodWeek),
+      (StatsPeriod.month, AppStrings.statsPeriodMonth),
+      (StatsPeriod.year, AppStrings.statsPeriodYear),
     ];
 
     return Container(
@@ -74,14 +66,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: AppSizes.md),
         child: Row(
           children: periods.map((period) {
-            final isSelected = _selectedPeriod == period.$1;
+            final isSelected = selectedPeriod == period.$1;
             return Padding(
               padding: const EdgeInsets.only(right: AppSizes.sm),
               child: FilterChip(
                 label: Text(period.$2),
                 selected: isSelected,
                 onSelected: (_) {
-                  setState(() => _selectedPeriod = period.$1);
+                  ref.read(statsPeriodProvider.notifier).state = period.$1;
                 },
                 showCheckmark: false,
                 backgroundColor: isDark
@@ -105,19 +97,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildSummarySection() {
-    // Calculate stats from mock data
-    final expenses = MockData.expenses;
-    final total = expenses.fold(0.0, (sum, e) => sum + e.amount);
-    final average = expenses.isNotEmpty ? total / expenses.length : 0.0;
-    final highest = expenses.isNotEmpty
-        ? expenses.map((e) => e.amount).reduce((a, b) => a > b ? a : b)
-        : 0.0;
+  Widget _buildSummarySection(WidgetRef ref) {
+    final summaryAsync = ref.watch(summaryStatsProvider);
 
-    return StatsSummaryRow(
-      total: total,
-      average: average,
-      highest: highest,
+    return summaryAsync.when(
+      loading: () => const SizedBox(
+        height: 100,
+        child: Center(child: AppLoadingWidget()),
+      ),
+      error: (error, _) => Text('Error: $error'),
+      data: (result) => result.fold(
+        (failure) => Text('Error: ${failure.message}'),
+        (stats) => StatsSummaryRow(
+          total: stats.total,
+          average: stats.average,
+          highest: stats.highest,
+        ),
+      ),
     );
   }
 }

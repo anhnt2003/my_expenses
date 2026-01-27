@@ -48,6 +48,14 @@ class AppRouter {
                 parentNavigatorKey: _rootNavigatorKey,
                 builder: (context, state) => const EditExpenseScreen(),
               ),
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) {
+                  final expenseId = state.pathParameters['id'];
+                  return EditExpenseScreen(expenseId: expenseId);
+                },
+              ),
             ],
           ),
           GoRoute(

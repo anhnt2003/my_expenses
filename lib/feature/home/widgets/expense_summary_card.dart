@@ -3,6 +3,7 @@ import 'package:my_expenses/core/constants/app_colors.dart';
 import 'package:my_expenses/core/constants/app_sizes.dart';
 import 'package:my_expenses/core/constants/app_strings.dart';
 import 'package:my_expenses/core/theme/text_styles.dart';
+import 'package:my_expenses/core/utils/currency_formatter.dart';
 
 class ExpenseSummaryCard extends StatelessWidget {
   const ExpenseSummaryCard({
@@ -80,7 +81,7 @@ class ExpenseSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSizes.md),
           Text(
-            '${AppStrings.currencySymbol}${totalAmount.toStringAsFixed(2)}',
+            CurrencyFormatter.format(totalAmount),
             style: AppTextStyles.amountLarge.copyWith(
               color: Colors.white,
             ),
@@ -180,7 +181,7 @@ class SmallSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSizes.xs),
           Text(
-            '${AppStrings.currencySymbol}${amount.toStringAsFixed(2)}',
+            CurrencyFormatter.format(amount),
             style: AppTextStyles.amountSmall.copyWith(
               color:
                   isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,

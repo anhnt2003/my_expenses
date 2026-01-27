@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/feature/expenses/widgets/expense_form.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Screen for adding a new expense.
-///
-/// Features:
-/// - Form layout with title, amount, category, date, note fields
-/// - Category selector (grid)
-/// - Date picker integration
-/// - Save button
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../domain/entities/expense.dart';
+import '../providers/expenses_provider.dart';
+import '../widgets/expense_form.dart';
+
+/* Screen for adding a new expense */
+
 class AddExpenseScreen extends StatelessWidget {
   const AddExpenseScreen({super.key});
 
@@ -27,24 +28,16 @@ class AddExpenseScreen extends StatelessWidget {
         elevation: 0,
         scrolledUnderElevation: 1,
       ),
-      body: SafeArea(
-        child: ExpenseForm(
-          onSave: () {
-            // Visual only - form handles navigation
-          },
-        ),
+      body: const SafeArea(
+        child: ExpenseForm(),
       ),
     );
   }
 }
 
-/// Screen for editing an existing expense.
-///
-/// Features:
-/// - Pre-filled form with expense data
-/// - Delete option
-/// - Save changes button
-class EditExpenseScreen extends StatelessWidget {
+/* Screen for editing an existing expense */
+
+class EditExpenseScreen extends ConsumerWidget {
   const EditExpenseScreen({
     super.key,
     this.expenseId,
@@ -53,11 +46,14 @@ class EditExpenseScreen extends StatelessWidget {
   final String? expenseId;
 
   @override
-  Widget build(BuildContext context) {
-    // For now, use mock data for editing
-    // In a real app, this would fetch the expense by ID
-    final mockExpense =
-        expenseId != null ? _getMockExpenseById(expenseId!) : null;
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (expenseId == null) {
+      return const Scaffold(
+        body: Center(child: Text('Expense not found')),
+      );
+    }
+
+    final expensesAsync = ref.watch(expensesListProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -71,7 +67,7 @@ class EditExpenseScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded),
-            onPressed: () => _showDeleteConfirmation(context),
+            onPressed: () => _showDeleteConfirmation(context, ref),
             tooltip: AppStrings.formDelete,
           ),
           const SizedBox(width: AppSizes.sm),
@@ -80,49 +76,73 @@ class EditExpenseScreen extends StatelessWidget {
         scrolledUnderElevation: 1,
       ),
       body: SafeArea(
-        child: ExpenseForm(
-          initialTitle: mockExpense?['title'] as String?,
-          initialAmount: mockExpense?['amount'] as double?,
-          initialNote: mockExpense?['note'] as String?,
-          isEditing: true,
-          onSave: () {
-            // Visual only - form handles navigation
-          },
+        child: expensesAsync.when(
+          loading: () => const Center(child: AppLoadingWidget()),
+          error: (error, _) => Center(child: Text('Error: $error')),
+          data: (result) => result.fold(
+            (failure) => Center(child: Text('Error: ${failure.message}')),
+            (expenses) {
+              Expense? expense;
+              try {
+                expense = expenses.firstWhere((e) => e.id == expenseId);
+              } catch (_) {}
+
+              if (expense == null) {
+                return const Center(child: Text('Expense not found'));
+              }
+
+              return ExpenseForm(
+                initialTitle: expense.title,
+                initialAmount: expense.amount,
+                initialCategoryId: expense.categoryId,
+                initialDate: expense.date,
+                initialNote: expense.note,
+                isEditing: true,
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Map<String, dynamic>? _getMockExpenseById(String id) {
-    // Mock data for demo purposes
-    return {
-      'title': 'Grocery Shopping',
-      'amount': 85.50,
-      'note': 'Weekly groceries from supermarket',
-    };
-  }
-
-  void _showDeleteConfirmation(BuildContext context) {
+  void _showDeleteConfirmation(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text(AppStrings.formDelete),
         content: const Text(AppStrings.commonConfirmDelete),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text(AppStrings.commonNo),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Close edit screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Expense deleted successfully!'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              final result = await ref
+                  .read(expensesNotifierProvider.notifier)
+                  .deleteExpense(expenseId!);
+              if (context.mounted) {
+                result.fold(
+                  (failure) => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${failure.message}'),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: AppColors.error,
+                    ),
+                  ),
+                  (_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Expense deleted successfully!'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    Navigator.of(context).pop();
+                  },
+                );
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,

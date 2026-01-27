@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
 
-/// A grid selector for choosing expense categories.
-///
-/// Features:
-/// - Grid layout of category icons with labels
-/// - Selected state styling with animation
-/// - Uses mock categories for display
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../domain/entities/category.dart';
+
+/* A grid selector for choosing expense categories using domain Category entity */
+
 class CategorySelector extends StatelessWidget {
   const CategorySelector({
     super.key,
@@ -18,9 +15,9 @@ class CategorySelector extends StatelessWidget {
     this.crossAxisCount = 4,
   });
 
-  final List<MockCategory> categories;
-  final MockCategory? selectedCategory;
-  final ValueChanged<MockCategory> onCategorySelected;
+  final List<Category> categories;
+  final Category? selectedCategory;
+  final ValueChanged<Category> onCategorySelected;
   final int crossAxisCount;
 
   @override
@@ -57,7 +54,7 @@ class _CategoryItem extends StatelessWidget {
     required this.onTap,
   });
 
-  final MockCategory category;
+  final Category category;
   final bool isSelected;
   final VoidCallback onTap;
 

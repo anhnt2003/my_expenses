@@ -1,33 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/categories/widgets/color_picker.dart';
-import 'package:my_expenses/feature/categories/widgets/icon_picker.dart';
-import 'package:my_expenses/shared/widgets/custom_button.dart';
-import 'package:my_expenses/shared/widgets/custom_text_field.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// A modal dialog for adding or editing a category.
-///
-/// Features:
-/// - Name input field
-/// - Icon picker integration
-/// - Color picker integration
-/// - Save and cancel actions
-class CategoryFormDialog extends StatefulWidget {
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../domain/entities/category.dart';
+import '../providers/categories_provider.dart';
+import 'color_picker.dart';
+import 'icon_picker.dart';
+import '../../../shared/widgets/custom_button.dart';
+import '../../../shared/widgets/custom_text_field.dart';
+
+/* A modal dialog for adding or editing a category with real provider integration */
+
+class CategoryFormDialog extends ConsumerStatefulWidget {
   const CategoryFormDialog({
     super.key,
     this.category,
   });
 
-  /// If provided, the dialog is in edit mode with pre-filled values
-  final MockCategory? category;
+  /* If provided, the dialog is in edit mode with pre-filled values */
+  final Category? category;
 
-  /// Shows the category form dialog
+  /* Shows the category form dialog */
   static Future<void> show(
     BuildContext context, {
-    MockCategory? category,
+    Category? category,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -44,14 +43,15 @@ class CategoryFormDialog extends StatefulWidget {
   }
 
   @override
-  State<CategoryFormDialog> createState() => _CategoryFormDialogState();
+  ConsumerState<CategoryFormDialog> createState() => _CategoryFormDialogState();
 }
 
-class _CategoryFormDialogState extends State<CategoryFormDialog> {
+class _CategoryFormDialogState extends ConsumerState<CategoryFormDialog> {
   late final TextEditingController _nameController;
   late IconData _selectedIcon;
   late Color _selectedColor;
   String? _nameError;
+  bool _isSubmitting = false;
 
   bool get _isEditing => widget.category != null;
 
@@ -81,7 +81,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
       builder: (context, scrollController) {
         return Column(
           children: [
-            // Handle bar
+            /* Handle bar */
             Container(
               margin: const EdgeInsets.only(top: AppSizes.sm),
               width: 40,
@@ -93,7 +93,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
               ),
             ),
 
-            // Header
+            /* Header */
             Padding(
               padding: const EdgeInsets.all(AppSizes.md),
               child: Row(
@@ -112,24 +112,23 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(width: 48), // Balance for close button
+                  const SizedBox(width: 48),
                 ],
               ),
             ),
-
             const Divider(height: 1),
 
-            // Content
+            /* Content */
             Expanded(
               child: ListView(
                 controller: scrollController,
                 padding: const EdgeInsets.all(AppSizes.md),
                 children: [
-                  // Preview
+                  /* Preview */
                   _buildPreview(context),
                   const SizedBox(height: AppSizes.lg),
 
-                  // Name field
+                  /* Name field */
                   CustomTextField(
                     controller: _nameController,
                     label: AppStrings.categoriesName,
@@ -144,7 +143,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
                   ),
                   const SizedBox(height: AppSizes.lg),
 
-                  // Icon picker section
+                  /* Icon picker section */
                   Text(
                     AppStrings.categoriesSelectIcon,
                     style: theme.textTheme.labelLarge,
@@ -159,7 +158,7 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
                   ),
                   const SizedBox(height: AppSizes.lg),
 
-                  // Color picker section
+                  /* Color picker section */
                   Text(
                     AppStrings.categoriesSelectColor,
                     style: theme.textTheme.labelLarge,
@@ -173,12 +172,14 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
                   ),
                   const SizedBox(height: AppSizes.xl),
 
-                  // Save button
-                  CustomButton(
-                    onPressed: _handleSave,
-                    label: AppStrings.formSave,
-                    icon: Icons.check_rounded,
-                  ),
+                  /* Save button */
+                  _isSubmitting
+                      ? const Center(child: AppLoadingWidget())
+                      : CustomButton(
+                          onPressed: _handleSave,
+                          label: AppStrings.formSave,
+                          icon: Icons.check_rounded,
+                        ),
                   const SizedBox(height: AppSizes.lg),
                 ],
               ),
@@ -232,25 +233,57 @@ class _CategoryFormDialogState extends State<CategoryFormDialog> {
     );
   }
 
-  void _handleSave() {
-    // Validate
+  Future<void> _handleSave() async {
+    /* Validate */
     if (_nameController.text.trim().isEmpty) {
       setState(() => _nameError = 'Please enter a category name');
       return;
     }
 
-    // Visual only - show success and close
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isEditing
-              ? 'Category updated successfully!'
-              : 'Category added successfully!',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    setState(() => _isSubmitting = true);
 
-    Navigator.of(context).pop();
+    final notifier = ref.read(categoriesNotifierProvider.notifier);
+
+    final result = _isEditing
+        ? await notifier.updateCategory(
+            widget.category!.id,
+            name: _nameController.text.trim(),
+            icon: _selectedIcon,
+            color: _selectedColor,
+          )
+        : await notifier.addCategory(
+            name: _nameController.text.trim(),
+            icon: _selectedIcon,
+            color: _selectedColor,
+          );
+
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = false);
+
+    result.fold(
+      (failure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${failure.message}'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
+          ),
+        );
+      },
+      (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _isEditing
+                  ? 'Category updated successfully!'
+                  : 'Category added successfully!',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop();
+      },
+    );
   }
 }

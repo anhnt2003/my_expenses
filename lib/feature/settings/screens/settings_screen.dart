@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:my_expenses/core/constants/app_colors.dart';
 import 'package:my_expenses/core/constants/app_sizes.dart';
 import 'package:my_expenses/core/constants/app_strings.dart';
 import 'package:my_expenses/feature/settings/widgets/settings_tile.dart';
+import 'package:my_expenses/feature/settings/providers/settings_provider.dart';
 
 /// The main settings screen.
 ///
@@ -12,22 +14,14 @@ import 'package:my_expenses/feature/settings/widgets/settings_tile.dart';
 /// - Export data option (visual only)
 /// - About section
 /// - App version display
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final notifier = ref.read(settingsProvider.notifier);
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  // Visual-only state
-  ThemeMode _themeMode = ThemeMode.system;
-  String _currency = 'USD';
-  bool _notificationsEnabled = true;
-  bool _biometricEnabled = false;
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(AppStrings.settingsTitle),
@@ -39,13 +33,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAppearanceSection(),
+              _buildAppearanceSection(context, settings, notifier),
               const SizedBox(height: AppSizes.lg),
-              _buildPreferencesSection(),
+              _buildPreferencesSection(context, settings, notifier),
               const SizedBox(height: AppSizes.lg),
-              _buildDataSection(),
+              _buildDataSection(context),
               const SizedBox(height: AppSizes.lg),
-              _buildAboutSection(),
+              _buildAboutSection(context),
               const SizedBox(height: AppSizes.xl),
             ],
           ),
@@ -54,7 +48,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAppearanceSection() {
+  Widget _buildAppearanceSection(
+    BuildContext context,
+    SettingsState settings,
+    SettingsNotifier notifier,
+  ) {
     return SettingsSection(
       title: 'Appearance',
       children: [
@@ -62,14 +60,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: const Icon(Icons.palette_outlined),
           title: AppStrings.settingsTheme,
           subtitle: 'Change app theme',
-          value: _getThemeLabel(),
-          onTap: () => _showThemeSelector(),
+          value: _getThemeLabel(settings.themeMode),
+          onTap: () => _showThemeSelector(context, settings, notifier),
         ),
       ],
     );
   }
 
-  Widget _buildPreferencesSection() {
+  Widget _buildPreferencesSection(
+    BuildContext context,
+    SettingsState settings,
+    SettingsNotifier notifier,
+  ) {
     return SettingsSection(
       title: 'Preferences',
       children: [
@@ -77,34 +79,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: const Icon(Icons.attach_money_rounded),
           title: AppStrings.settingsCurrency,
           subtitle: 'Default currency for expenses',
-          value: _currency,
-          onTap: () => _showCurrencySelector(),
+          value: settings.currency,
+          onTap: () => _showCurrencySelector(context, settings, notifier),
         ),
         SettingsTile.withSwitch(
           leading: const Icon(Icons.notifications_outlined),
           title: 'Notifications',
           subtitle: 'Receive expense reminders',
-          value: _notificationsEnabled,
+          value: settings.notificationsEnabled,
           onChanged: (value) {
-            setState(() => _notificationsEnabled = value);
-            _showSnackBar('Notifications ${value ? 'enabled' : 'disabled'}');
+            notifier.setNotificationsEnabled(value);
+            _showSnackBar(
+                context, 'Notifications ${value ? 'enabled' : 'disabled'}');
           },
         ),
         SettingsTile.withSwitch(
           leading: const Icon(Icons.fingerprint_rounded),
           title: 'Biometric Lock',
           subtitle: 'Require Face ID or Touch ID',
-          value: _biometricEnabled,
+          value: settings.biometricEnabled,
           onChanged: (value) {
-            setState(() => _biometricEnabled = value);
-            _showSnackBar('Biometric lock ${value ? 'enabled' : 'disabled'}');
+            notifier.setBiometricEnabled(value);
+            _showSnackBar(
+                context, 'Biometric lock ${value ? 'enabled' : 'disabled'}');
           },
         ),
       ],
     );
   }
 
-  Widget _buildDataSection() {
+  Widget _buildDataSection(BuildContext context) {
     return SettingsSection(
       title: 'Data',
       children: [
@@ -112,25 +116,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: const Icon(Icons.upload_rounded),
           title: AppStrings.settingsExportData,
           subtitle: 'Export expenses to CSV',
-          onTap: () => _showExportOptions(),
+          onTap: () => _showExportOptions(context),
         ),
         SettingsTile.navigation(
           leading: const Icon(Icons.download_rounded),
           title: 'Import Data',
           subtitle: 'Import expenses from CSV',
-          onTap: () => _showImportDialog(),
+          onTap: () => _showSnackBar(context, 'Import feature coming soon!'),
         ),
         SettingsTile.navigation(
           leading: const Icon(Icons.delete_outline_rounded),
           title: 'Clear All Data',
           subtitle: 'Delete all expenses and categories',
-          onTap: () => _showClearDataConfirmation(),
+          onTap: () => _showClearDataConfirmation(context),
         ),
       ],
     );
   }
 
-  Widget _buildAboutSection() {
+  Widget _buildAboutSection(BuildContext context) {
     return SettingsSection(
       title: 'About',
       children: [
@@ -138,10 +142,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: const Icon(Icons.info_outline_rounded),
           title: AppStrings.settingsAbout,
           subtitle: AppStrings.appName,
-          onTap: () => _showAboutDialog(),
+          onTap: () => _showAboutDialog(context),
         ),
-        SettingsTile(
-          leading: const Icon(Icons.verified_outlined),
+        const SettingsTile(
+          leading: Icon(Icons.verified_outlined),
           title: AppStrings.settingsVersion,
           subtitle: 'Current app version',
           trailing: Text(
@@ -156,20 +160,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           leading: const Icon(Icons.description_outlined),
           title: 'Privacy Policy',
           subtitle: 'View our privacy policy',
-          onTap: () => _showSnackBar('Opening Privacy Policy...'),
+          onTap: () => _showSnackBar(context, 'Opening Privacy Policy...'),
         ),
         SettingsTile.navigation(
           leading: const Icon(Icons.gavel_outlined),
           title: 'Terms of Service',
           subtitle: 'View terms and conditions',
-          onTap: () => _showSnackBar('Opening Terms of Service...'),
+          onTap: () => _showSnackBar(context, 'Opening Terms of Service...'),
         ),
       ],
     );
   }
 
-  String _getThemeLabel() {
-    switch (_themeMode) {
+  String _getThemeLabel(ThemeMode themeMode) {
+    switch (themeMode) {
       case ThemeMode.light:
         return AppStrings.settingsThemeLight;
       case ThemeMode.dark:
@@ -179,10 +183,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showThemeSelector() {
+  void _showThemeSelector(
+    BuildContext context,
+    SettingsState settings,
+    SettingsNotifier notifier,
+  ) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -190,14 +198,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(AppSizes.md),
               child: Text(
                 'Select Theme',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(ctx).textTheme.titleLarge,
               ),
             ),
-            _buildThemeOption(ThemeMode.light, AppStrings.settingsThemeLight,
+            _buildThemeOption(
+                ctx,
+                notifier,
+                settings.themeMode,
+                ThemeMode.light,
+                AppStrings.settingsThemeLight,
                 Icons.light_mode_rounded),
-            _buildThemeOption(ThemeMode.dark, AppStrings.settingsThemeDark,
-                Icons.dark_mode_rounded),
-            _buildThemeOption(ThemeMode.system, AppStrings.settingsThemeSystem,
+            _buildThemeOption(ctx, notifier, settings.themeMode, ThemeMode.dark,
+                AppStrings.settingsThemeDark, Icons.dark_mode_rounded),
+            _buildThemeOption(
+                ctx,
+                notifier,
+                settings.themeMode,
+                ThemeMode.system,
+                AppStrings.settingsThemeSystem,
                 Icons.settings_suggest_rounded),
             const SizedBox(height: AppSizes.lg),
           ],
@@ -206,8 +224,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeOption(ThemeMode mode, String label, IconData icon) {
-    final isSelected = _themeMode == mode;
+  Widget _buildThemeOption(
+    BuildContext context,
+    SettingsNotifier notifier,
+    ThemeMode currentMode,
+    ThemeMode mode,
+    String label,
+    IconData icon,
+  ) {
+    final isSelected = currentMode == mode;
 
     return ListTile(
       leading: Icon(icon, color: isSelected ? AppColors.primary : null),
@@ -216,52 +241,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Icon(Icons.check_rounded, color: AppColors.primary)
           : null,
       onTap: () {
-        setState(() => _themeMode = mode);
+        notifier.setThemeMode(mode);
         Navigator.pop(context);
-        _showSnackBar('Theme changed to $label');
+        _showSnackBar(context, 'Theme changed to $label');
       },
     );
   }
 
-  void _showCurrencySelector() {
+  void _showCurrencySelector(
+    BuildContext context,
+    SettingsState settings,
+    SettingsNotifier notifier,
+  ) {
     final currencies = ['USD', 'EUR', 'GBP', 'JPY', 'VND', 'CNY', 'AUD', 'CAD'];
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSizes.md),
-              child: Text(
-                'Select Currency',
-                style: Theme.of(context).textTheme.titleLarge,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSizes.md),
+                child: Text(
+                  'Select Currency',
+                  style: Theme.of(ctx).textTheme.titleLarge,
+                ),
               ),
-            ),
-            ...currencies.map((currency) => ListTile(
-                  title: Text(currency),
-                  trailing: _currency == currency
-                      ? const Icon(Icons.check_rounded,
-                          color: AppColors.primary)
-                      : null,
-                  onTap: () {
-                    setState(() => _currency = currency);
-                    Navigator.pop(context);
-                    _showSnackBar('Currency changed to $currency');
-                  },
-                )),
-            const SizedBox(height: AppSizes.lg),
-          ],
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: currencies
+                        .map((currency) => ListTile(
+                              title: Text(currency),
+                              trailing: settings.currency == currency
+                                  ? const Icon(Icons.check_rounded,
+                                      color: AppColors.primary)
+                                  : null,
+                              onTap: () {
+                                notifier.setCurrency(currency);
+                                Navigator.pop(ctx);
+                                _showSnackBar(
+                                    context, 'Currency changed to $currency');
+                              },
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSizes.lg),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  void _showExportOptions() {
+  void _showExportOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -269,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.all(AppSizes.md),
               child: Text(
                 'Export Data',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(ctx).textTheme.titleLarge,
               ),
             ),
             ListTile(
@@ -277,8 +322,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Export as CSV'),
               subtitle: const Text('Spreadsheet format'),
               onTap: () {
-                Navigator.pop(context);
-                _showSnackBar('Exporting to CSV...');
+                Navigator.pop(ctx);
+                _showSnackBar(context, 'Exporting to CSV...');
               },
             ),
             ListTile(
@@ -286,8 +331,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: const Text('Export as JSON'),
               subtitle: const Text('Data backup format'),
               onTap: () {
-                Navigator.pop(context);
-                _showSnackBar('Exporting to JSON...');
+                Navigator.pop(ctx);
+                _showSnackBar(context, 'Exporting to JSON...');
               },
             ),
             const SizedBox(height: AppSizes.lg),
@@ -297,27 +342,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showImportDialog() {
-    _showSnackBar('Import feature coming soon!');
-  }
-
-  void _showClearDataConfirmation() {
+  void _showClearDataConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Clear All Data'),
         content: const Text(
           'This will permanently delete all your expenses, categories, and settings. This action cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              _showSnackBar('All data cleared successfully!');
+              Navigator.pop(ctx);
+              _showSnackBar(context, 'All data cleared successfully!');
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Delete Everything'),
@@ -327,7 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showAboutDialog() {
+  void _showAboutDialog(BuildContext context) {
     showAboutDialog(
       context: context,
       applicationName: AppStrings.appName,
@@ -335,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       applicationIcon: Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.primary,
           borderRadius: AppSizes.borderRadiusMd,
         ),
@@ -354,7 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class RecentExpensesList extends StatelessWidget {
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../domain/entities/expense.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
+import '../providers/home_provider.dart';
+import '../../categories/providers/categories_provider.dart';
+
+class RecentExpensesList extends ConsumerWidget {
   const RecentExpensesList({
     super.key,
     this.onSeeAllPressed,
@@ -13,9 +20,10 @@ class RecentExpensesList extends StatelessWidget {
   final VoidCallback? onSeeAllPressed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final expenses = MockData.recentExpenses;
+    final recentExpenses = ref.watch(recentExpensesProvider);
+    final categories = ref.watch(categoriesListProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -37,19 +45,63 @@ class RecentExpensesList extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSizes.sm),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: AppSizes.md),
-          itemCount: expenses.length,
-          separatorBuilder: (context, index) =>
-              const SizedBox(height: AppSizes.sm),
-          itemBuilder: (context, index) => _ExpenseItem(
-            key: ValueKey(expenses[index].id),
-            expense: expenses[index],
+        recentExpenses.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(AppSizes.lg),
+            child: Center(child: AppLoadingWidget()),
+          ),
+          error: (error, _) => Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: Text('Error loading expenses: $error'),
+          ),
+          data: (result) => result.fold(
+            (failure) => Padding(
+              padding: const EdgeInsets.all(AppSizes.md),
+              child: Text('Error: ${failure.message}'),
+            ),
+            (expenses) {
+              if (expenses.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(AppSizes.lg),
+                  child: EmptyStateWidget(
+                    icon: Icons.receipt_long_rounded,
+                    message: 'No expenses yet',
+                    description: 'Tap + to add your first expense',
+                  ),
+                );
+              }
+
+              return categories.when(
+                loading: () => const AppLoadingWidget(),
+                error: (_, __) => _buildExpenseList(context, expenses, null),
+                data: (catResult) => catResult.fold(
+                  (_) => _buildExpenseList(context, expenses, null),
+                  (cats) => _buildExpenseList(context, expenses, cats),
+                ),
+              );
+            },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildExpenseList(
+    BuildContext context,
+    List<Expense> expenses,
+    List<dynamic>? categories,
+  ) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: AppSizes.md),
+      itemCount: expenses.length,
+      separatorBuilder: (context, index) => const SizedBox(height: AppSizes.sm),
+      itemBuilder: (context, index) => _ExpenseItem(
+        key: ValueKey(expenses[index].id),
+        expense: expenses[index],
+        categories: categories,
+      ),
     );
   }
 }
@@ -58,14 +110,33 @@ class _ExpenseItem extends StatelessWidget {
   const _ExpenseItem({
     super.key,
     required this.expense,
+    this.categories,
   });
 
-  final MockExpense expense;
+  final Expense expense;
+  final List<dynamic>? categories;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    /* Find category for this expense */
+    IconData categoryIcon = Icons.category;
+    Color categoryColor = AppColors.primary;
+
+    if (categories != null) {
+      try {
+        final category = categories!.firstWhere(
+          (c) => c.id == expense.categoryId,
+          orElse: () => null,
+        );
+        if (category != null) {
+          categoryIcon = category.icon;
+          categoryColor = category.color;
+        }
+      } catch (_) {}
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppSizes.md),
@@ -86,13 +157,13 @@ class _ExpenseItem extends StatelessWidget {
             width: AppSizes.categoryIconSize,
             height: AppSizes.categoryIconSize,
             decoration: BoxDecoration(
-              color: expense.category.color.withValues(alpha: 0.15),
+              color: categoryColor.withValues(alpha: 0.15),
               borderRadius: AppSizes.borderRadiusSm,
             ),
             child: Icon(
-              expense.category.icon,
+              categoryIcon,
               size: AppSizes.iconSm,
-              color: expense.category.color,
+              color: categoryColor,
             ),
           ),
           const SizedBox(width: AppSizes.md),
@@ -121,7 +192,7 @@ class _ExpenseItem extends StatelessWidget {
             ),
           ),
           Text(
-            '-${AppStrings.currencySymbol}${expense.amount.toStringAsFixed(2)}',
+            '-${CurrencyFormatter.format(expense.amount)}',
             style: theme.textTheme.titleMedium?.copyWith(
               color: AppColors.error,
               fontWeight: FontWeight.w600,

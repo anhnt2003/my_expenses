@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:my_expenses/core/constants/app_colors.dart';
-import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/core/constants/app_strings.dart';
-import 'package:my_expenses/core/mock/mock_data.dart';
-import 'package:my_expenses/feature/expenses/widgets/expense_tile.dart';
-import 'package:my_expenses/router/route_names.dart';
-import 'package:my_expenses/shared/widgets/empty_state_widget.dart';
 
-/// The main expenses list screen.
-///
-/// Features:
-/// - AppBar with search and filter icons
-/// - Date filter chips (Today, This Week, This Month, All)
-/// - Grouped expense list by date
-/// - Empty state when no expenses
-class ExpensesListScreen extends StatefulWidget {
+import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../domain/entities/expense.dart';
+import '../../../router/route_names.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
+import '../../categories/providers/categories_provider.dart';
+import '../providers/expenses_provider.dart';
+import '../widgets/expense_tile.dart';
+
+/* Expenses list screen with search, filter, and CRUD operations */
+
+class ExpensesListScreen extends ConsumerStatefulWidget {
   const ExpensesListScreen({super.key});
 
   @override
-  State<ExpensesListScreen> createState() => _ExpensesListScreenState();
+  ConsumerState<ExpensesListScreen> createState() => _ExpensesListScreenState();
 }
 
-class _ExpensesListScreenState extends State<ExpensesListScreen> {
-  String _selectedFilter = 'all';
+class _ExpensesListScreenState extends ConsumerState<ExpensesListScreen> {
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -66,6 +67,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
             setState(() {
               _isSearching = false;
               _searchController.clear();
+              _searchQuery = '';
             });
           },
         ),
@@ -80,14 +82,17 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
             ),
           ),
           style: theme.textTheme.bodyLarge,
-          onChanged: (_) => setState(() {}),
+          onChanged: (value) => setState(() => _searchQuery = value),
         ),
         actions: [
           if (_searchController.text.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.clear_rounded),
               onPressed: () {
-                setState(() => _searchController.clear());
+                setState(() {
+                  _searchController.clear();
+                  _searchQuery = '';
+                });
               },
             ),
         ],
@@ -118,12 +123,13 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   Widget _buildFilterChips(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final currentFilter = ref.watch(expenseFilterProvider);
 
     final filters = [
-      ('today', AppStrings.expensesFilterToday),
-      ('week', AppStrings.expensesFilterWeek),
-      ('month', AppStrings.expensesFilterMonth),
-      ('all', AppStrings.expensesFilterAll),
+      (ExpenseFilter.today, AppStrings.expensesFilterToday),
+      (ExpenseFilter.thisWeek, AppStrings.expensesFilterWeek),
+      (ExpenseFilter.thisMonth, AppStrings.expensesFilterMonth),
+      (ExpenseFilter.all, AppStrings.expensesFilterAll),
     ];
 
     return Container(
@@ -133,14 +139,14 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
         padding: const EdgeInsets.symmetric(horizontal: AppSizes.md),
         child: Row(
           children: filters.map((filter) {
-            final isSelected = _selectedFilter == filter.$1;
+            final isSelected = currentFilter == filter.$1;
             return Padding(
               padding: const EdgeInsets.only(right: AppSizes.sm),
               child: FilterChip(
                 label: Text(filter.$2),
                 selected: isSelected,
                 onSelected: (_) {
-                  setState(() => _selectedFilter = filter.$1);
+                  ref.read(expenseFilterProvider.notifier).state = filter.$1;
                 },
                 showCheckmark: false,
                 backgroundColor: isDark
@@ -165,39 +171,92 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   }
 
   Widget _buildExpensesList(BuildContext context) {
-    final expenses = _getFilteredExpenses();
+    final expensesAsync = ref.watch(expensesListProvider);
+    final categoriesAsync = ref.watch(categoriesListProvider);
 
-    if (expenses.isEmpty) {
-      return EmptyStateWidget(
-        icon: Icons.receipt_long_rounded,
-        message: AppStrings.expensesNoExpenses,
-        description: AppStrings.expensesNoExpensesDesc,
-        actionLabel: AppStrings.expensesAddNew,
-        onAction: () => context.push(RouteNames.addExpense),
-      );
-    }
+    return expensesAsync.when(
+      loading: () => const Center(child: AppLoadingWidget()),
+      error: (error, _) => Center(child: Text('Error: $error')),
+      data: (result) => result.fold(
+        (failure) => Center(child: Text('Error: ${failure.message}')),
+        (expenses) {
+          /* Apply local search filter */
+          var filteredExpenses = expenses;
+          if (_searchQuery.isNotEmpty) {
+            final query = _searchQuery.toLowerCase();
+            filteredExpenses = expenses.where((e) {
+              return e.title.toLowerCase().contains(query) ||
+                  (e.note?.toLowerCase().contains(query) ?? false);
+            }).toList();
+          }
 
-    // Group expenses by date
-    final groupedExpenses = _groupExpensesByDate(expenses);
+          if (filteredExpenses.isEmpty) {
+            return EmptyStateWidget(
+              icon: Icons.receipt_long_rounded,
+              message: AppStrings.expensesNoExpenses,
+              description: AppStrings.expensesNoExpensesDesc,
+              actionLabel: AppStrings.expensesAddNew,
+              onAction: () => context.push(RouteNames.addExpense),
+            );
+          }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(
-        left: AppSizes.md,
-        right: AppSizes.md,
-        bottom: AppSizes.xxl + AppSizes.xl, // Extra padding for FAB
+          /* Get categories for display */
+          final categories = categoriesAsync.when(
+            loading: () => <dynamic>[],
+            error: (_, __) => <dynamic>[],
+            data: (catResult) => catResult.fold(
+              (_) => <dynamic>[],
+              (cats) => cats,
+            ),
+          );
+
+          /* Check sort type to decide on display mode */
+          final currentSort = ref.watch(expenseSortProvider);
+          final useDateGrouping = currentSort == ExpenseSort.dateDesc ||
+              currentSort == ExpenseSort.dateAsc;
+
+          if (useDateGrouping) {
+            /* Group expenses by date for date-based sorting */
+            final groupedExpenses = _groupExpensesByDate(filteredExpenses);
+
+            return ListView.builder(
+              padding: const EdgeInsets.only(
+                left: AppSizes.md,
+                right: AppSizes.md,
+                bottom: AppSizes.xxl + AppSizes.xl,
+              ),
+              itemCount: groupedExpenses.length,
+              itemBuilder: (context, index) {
+                final entry = groupedExpenses.entries.elementAt(index);
+                return _buildDateGroup(
+                    context, entry.key, entry.value, categories);
+              },
+            );
+          } else {
+            /* Flat list for amount/title sorting */
+            return ListView.builder(
+              padding: const EdgeInsets.only(
+                left: AppSizes.md,
+                right: AppSizes.md,
+                bottom: AppSizes.xxl + AppSizes.xl,
+              ),
+              itemCount: filteredExpenses.length,
+              itemBuilder: (context, index) {
+                final expense = filteredExpenses[index];
+                return _buildExpenseItem(context, expense, categories);
+              },
+            );
+          }
+        },
       ),
-      itemCount: groupedExpenses.length,
-      itemBuilder: (context, index) {
-        final entry = groupedExpenses.entries.elementAt(index);
-        return _buildDateGroup(context, entry.key, entry.value);
-      },
     );
   }
 
   Widget _buildDateGroup(
     BuildContext context,
     String dateLabel,
-    List<MockExpense> expenses,
+    List<Expense> expenses,
+    List<dynamic> categories,
   ) {
     final theme = Theme.of(context);
 
@@ -220,7 +279,7 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
               ),
               const Spacer(),
               Text(
-                '${AppStrings.currencySymbol}${_calculateTotal(expenses).toStringAsFixed(2)}',
+                CurrencyFormatter.format(_calculateTotal(expenses)),
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: AppColors.error,
                   fontWeight: FontWeight.w600,
@@ -229,71 +288,79 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
             ],
           ),
         ),
-        ...expenses.map((expense) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSizes.sm),
-              child: ExpenseTile(
-                key: ValueKey(expense.id),
-                expense: expense,
-                onTap: () => context.push('${RouteNames.expenses}/edit'),
-                onDelete: () {
-                  _showDeleteConfirmation(context, expense);
-                },
-              ),
-            )),
+        ...expenses.map((expense) {
+          /* Find category for this expense */
+          IconData categoryIcon = Icons.category;
+          Color categoryColor = AppColors.primary;
+          String categoryName = 'Unknown';
+
+          try {
+            final category = categories.firstWhere(
+              (c) => c.id == expense.categoryId,
+              orElse: () => null,
+            );
+            if (category != null) {
+              categoryIcon = category.icon;
+              categoryColor = category.color;
+              categoryName = category.name;
+            }
+          } catch (_) {}
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSizes.sm),
+            child: ExpenseTile(
+              key: ValueKey(expense.id),
+              expense: expense,
+              categoryIcon: categoryIcon,
+              categoryColor: categoryColor,
+              categoryName: categoryName,
+              onTap: () => context.push('${RouteNames.expenses}/${expense.id}'),
+              onDelete: () => _showDeleteConfirmation(context, expense),
+            ),
+          );
+        }),
       ],
     );
   }
 
-  double _calculateTotal(List<MockExpense> expenses) {
+  Widget _buildExpenseItem(
+      BuildContext context, Expense expense, List<dynamic> categories) {
+    IconData categoryIcon = Icons.category;
+    Color categoryColor = AppColors.primary;
+    String categoryName = 'Unknown';
+
+    try {
+      final category = categories.firstWhere(
+        (c) => c.id == expense.categoryId,
+        orElse: () => null,
+      );
+      if (category != null) {
+        categoryIcon = category.icon;
+        categoryColor = category.color;
+        categoryName = category.name;
+      }
+    } catch (_) {}
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSizes.sm),
+      child: ExpenseTile(
+        key: ValueKey(expense.id),
+        expense: expense,
+        categoryIcon: categoryIcon,
+        categoryColor: categoryColor,
+        categoryName: categoryName,
+        onTap: () => context.push('${RouteNames.expenses}/${expense.id}'),
+        onDelete: () => _showDeleteConfirmation(context, expense),
+      ),
+    );
+  }
+
+  double _calculateTotal(List<Expense> expenses) {
     return expenses.fold(0.0, (sum, e) => sum + e.amount);
   }
 
-  List<MockExpense> _getFilteredExpenses() {
-    var expenses = MockData.expenses;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    // Apply date filter
-    switch (_selectedFilter) {
-      case 'today':
-        expenses = expenses.where((e) {
-          final expenseDate = DateTime(e.date.year, e.date.month, e.date.day);
-          return expenseDate == today;
-        }).toList();
-        break;
-      case 'week':
-        final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
-        expenses = expenses.where((e) {
-          final expenseDate = DateTime(e.date.year, e.date.month, e.date.day);
-          return expenseDate
-              .isAfter(startOfWeek.subtract(const Duration(days: 1)));
-        }).toList();
-        break;
-      case 'month':
-        final startOfMonth = DateTime(now.year, now.month, 1);
-        expenses = expenses.where((e) {
-          return e.date.isAfter(startOfMonth.subtract(const Duration(days: 1)));
-        }).toList();
-        break;
-    }
-
-    // Apply search filter
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text.toLowerCase();
-      expenses = expenses.where((e) {
-        return e.title.toLowerCase().contains(query) ||
-            e.category.name.toLowerCase().contains(query) ||
-            (e.note?.toLowerCase().contains(query) ?? false);
-      }).toList();
-    }
-
-    return expenses;
-  }
-
-  Map<String, List<MockExpense>> _groupExpensesByDate(
-    List<MockExpense> expenses,
-  ) {
-    final Map<String, List<MockExpense>> grouped = {};
+  Map<String, List<Expense>> _groupExpensesByDate(List<Expense> expenses) {
+    final Map<String, List<Expense>> grouped = {};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -319,38 +386,32 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
   }
 
   void _showFilterBottomSheet(BuildContext context) {
+    final currentSort = ref.read(expenseSortProvider);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.all(AppSizes.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Filter Options',
+              'Sort By',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: AppSizes.md),
-            ListTile(
-              leading: const Icon(Icons.category_rounded),
-              title: const Text('By Category'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money_rounded),
-              title: const Text('By Amount'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.sort_rounded),
-              title: const Text('Sort Order'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.pop(context),
-            ),
+            _buildSortOption(
+                ctx, 'Date (Newest First)', ExpenseSort.dateDesc, currentSort),
+            _buildSortOption(
+                ctx, 'Date (Oldest First)', ExpenseSort.dateAsc, currentSort),
+            _buildSortOption(ctx, 'Amount (Highest First)',
+                ExpenseSort.amountDesc, currentSort),
+            _buildSortOption(ctx, 'Amount (Lowest First)',
+                ExpenseSort.amountAsc, currentSort),
+            _buildSortOption(
+                ctx, 'Title (A-Z)', ExpenseSort.titleAsc, currentSort),
             const SizedBox(height: AppSizes.lg),
           ],
         ),
@@ -358,7 +419,31 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, MockExpense expense) {
+  Widget _buildSortOption(BuildContext context, String title, ExpenseSort sort,
+      ExpenseSort currentSort) {
+    final isSelected = sort == currentSort;
+    return ListTile(
+      leading: Icon(
+        isSelected
+            ? Icons.radio_button_checked_rounded
+            : Icons.radio_button_off_rounded,
+        color: isSelected ? AppColors.primary : null,
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isSelected ? AppColors.primary : null,
+          fontWeight: isSelected ? FontWeight.w600 : null,
+        ),
+      ),
+      onTap: () {
+        ref.read(expenseSortProvider.notifier).state = sort;
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, Expense expense) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -370,14 +455,28 @@ class _ExpensesListScreenState extends State<ExpensesListScreen> {
             child: const Text(AppStrings.commonNo),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Expense deleted successfully!'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              final result = await ref
+                  .read(expensesNotifierProvider.notifier)
+                  .deleteExpense(expense.id);
+              if (context.mounted) {
+                result.fold(
+                  (failure) => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${failure.message}'),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: AppColors.error,
+                    ),
+                  ),
+                  (_) => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Expense deleted successfully!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  ),
+                );
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
