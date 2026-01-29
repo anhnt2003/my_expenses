@@ -27,10 +27,6 @@ class CategoriesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text(AppStrings.categoriesTitle),
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ),
       body: SafeArea(
         child: categoriesAsync.when(
@@ -61,13 +57,11 @@ class CategoriesScreen extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    return EmptyStateWidget(
-      icon: Icons.category_rounded,
-      message: AppStrings.categoriesNoCategories,
-      description: AppStrings.categoriesNoCategoriesDesc,
-      actionLabel: AppStrings.categoriesAddNew,
-      onAction: () => CategoryFormDialog.show(context),
-    );
+    return const EmptyStateWidget(
+        icon: Icons.category_rounded,
+        message: AppStrings.categoriesNoCategories,
+        description: AppStrings.categoriesNoCategoriesDesc,
+        actionLabel: AppStrings.categoriesAddNew);
   }
 
   Widget _buildCategoryList(

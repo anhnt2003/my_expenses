@@ -61,6 +61,11 @@ class _BottomNavBar extends StatelessWidget {
             label: AppStrings.navStatistics,
           ),
           NavigationDestination(
+            icon: Icon(Icons.category_outlined),
+            selectedIcon: Icon(Icons.category_rounded),
+            label: AppStrings.navCategories,
+          ),
+          NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings_rounded),
             label: AppStrings.navSettings,
@@ -73,7 +78,8 @@ class _BottomNavBar extends StatelessWidget {
   int _calculateSelectedIndex(String location) {
     if (location.startsWith(RouteNames.expenses)) return 1;
     if (location.startsWith(RouteNames.statistics)) return 2;
-    if (location.startsWith(RouteNames.settings)) return 3;
+    if (location.startsWith(RouteNames.categories)) return 3;
+    if (location.startsWith(RouteNames.settings)) return 4;
     return 0;
   }
 
@@ -89,6 +95,9 @@ class _BottomNavBar extends StatelessWidget {
         context.go(RouteNames.statistics);
         break;
       case 3:
+        context.go(RouteNames.categories);
+        break;
+      case 4:
         context.go(RouteNames.settings);
         break;
     }

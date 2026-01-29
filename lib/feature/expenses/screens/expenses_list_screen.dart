@@ -83,6 +83,9 @@ class _ExpensesListScreenState extends ConsumerState<ExpensesListScreen> {
           ),
           style: theme.textTheme.bodyLarge,
           onChanged: (value) => setState(() => _searchQuery = value),
+          onTapOutside: (_) {
+            FocusScope.of(context).unfocus();
+          },
         ),
         actions: [
           if (_searchController.text.isNotEmpty)
@@ -191,13 +194,11 @@ class _ExpensesListScreenState extends ConsumerState<ExpensesListScreen> {
           }
 
           if (filteredExpenses.isEmpty) {
-            return EmptyStateWidget(
-              icon: Icons.receipt_long_rounded,
-              message: AppStrings.expensesNoExpenses,
-              description: AppStrings.expensesNoExpensesDesc,
-              actionLabel: AppStrings.expensesAddNew,
-              onAction: () => context.push(RouteNames.addExpense),
-            );
+            return const EmptyStateWidget(
+                icon: Icons.receipt_long_rounded,
+                message: AppStrings.expensesNoExpenses,
+                description: AppStrings.expensesNoExpensesDesc,
+                actionLabel: AppStrings.expensesAddNew);
           }
 
           /* Get categories for display */

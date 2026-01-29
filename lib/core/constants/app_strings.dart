@@ -9,6 +9,7 @@ class AppStrings {
   static const String navHome = 'Home';
   static const String navExpenses = 'Expenses';
   static const String navStatistics = 'Statistics';
+  static const String navCategories = 'Categories';
   static const String navSettings = 'Settings';
 
   /* Home Screen */

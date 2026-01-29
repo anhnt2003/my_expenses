@@ -71,6 +71,9 @@ class CustomTextField extends StatelessWidget {
           onChanged: onChanged,
           onSubmitted: onSubmitted,
           onTap: onTap,
+          onTapOutside: (_) {
+            FocusScope.of(context).unfocus();
+          },
           inputFormatters: inputFormatters,
           autofocus: autofocus,
           decoration: InputDecoration(

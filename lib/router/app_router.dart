@@ -65,17 +65,18 @@ class AppRouter {
             ),
           ),
           GoRoute(
+            path: RouteNames.categories,
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: CategoriesScreen(),
+            ),
+          ),
+          GoRoute(
             path: RouteNames.settings,
             pageBuilder: (context, state) => const NoTransitionPage(
               child: SettingsScreen(),
             ),
           ),
         ],
-      ),
-      GoRoute(
-        path: RouteNames.categories,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const CategoriesScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

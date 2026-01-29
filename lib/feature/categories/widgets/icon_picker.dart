@@ -130,6 +130,9 @@ class _IconPickerState extends State<IconPicker> {
           onChanged: (value) {
             setState(() => _searchQuery = value);
           },
+          onTapOutside: (_) {
+            FocusScope.of(context).unfocus();
+          },
         ),
         const SizedBox(height: AppSizes.md),
 

@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants/hive_constants.dart';
 import '../data/datasources/local/category_local_datasource.dart';
@@ -12,6 +13,10 @@ final getIt = GetIt.instance;
 
 /* Configure all dependencies - call this before runApp */
 Future<void> configureDependencies() async {
+  /* Initialize SharedPreferences for settings persistence */
+  final sharedPreferences = await SharedPreferences.getInstance();
+  getIt.registerSingleton<SharedPreferences>(sharedPreferences);
+
   /* Initialize Hive */
   await Hive.initFlutter();
 

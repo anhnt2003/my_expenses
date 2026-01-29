@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:my_expenses/core/constants/app_colors.dart';
 import 'package:my_expenses/core/constants/app_sizes.dart';
-import 'package:my_expenses/shared/widgets/custom_button.dart';
 
 class EmptyStateWidget extends StatelessWidget {
-  const EmptyStateWidget({
-    super.key,
-    required this.message,
-    this.description,
-    this.icon,
-    this.actionLabel,
-    this.onAction,
-  });
+  const EmptyStateWidget(
+      {super.key,
+      required this.message,
+      this.description,
+      this.icon,
+      this.actionLabel});
 
   final String message;
   final String? description;
   final IconData? icon;
   final String? actionLabel;
-  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -62,15 +58,6 @@ class EmptyStateWidget extends StatelessWidget {
                       : AppColors.lightOnSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
-              ),
-            ],
-            if (onAction != null && actionLabel != null) ...[
-              const SizedBox(height: AppSizes.lg),
-              CustomButton(
-                onPressed: onAction,
-                label: actionLabel!,
-                icon: Icons.add_rounded,
-                width: 200,
               ),
             ],
           ],
