@@ -73,8 +73,8 @@ class ExpenseLocalDataSourceImpl implements ExpenseLocalDataSource {
   ) async {
     try {
       final expenses = _box.values.where((expense) {
-        return expense.date.isAfter(start.subtract(const Duration(days: 1))) &&
-            expense.date.isBefore(end.add(const Duration(days: 1)));
+        final d = expense.date;
+        return !d.isBefore(start) && !d.isAfter(end);
       }).toList();
       expenses.sort((a, b) => b.date.compareTo(a.date));
       return expenses;

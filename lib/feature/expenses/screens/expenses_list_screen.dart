@@ -371,9 +371,9 @@ class _ExpensesListScreenState extends ConsumerState<ExpensesListScreen> {
           DateTime(expense.date.year, expense.date.month, expense.date.day);
 
       String label;
-      if (expenseDate == today) {
+      if (expenseDate.isAtSameMomentAs(today)) {
         label = 'Today';
-      } else if (expenseDate == yesterday) {
+      } else if (expenseDate.isAtSameMomentAs(yesterday)) {
         label = 'Yesterday';
       } else {
         label = DateFormat('EEEE, MMM d').format(expense.date);

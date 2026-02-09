@@ -20,7 +20,7 @@ final monthlyTotalProvider =
     FutureProvider<Either<Failure, double>>((ref) async {
   final now = DateTime.now();
   final startOfMonth = DateTime(now.year, now.month, 1);
-  final endOfMonth = DateTime(now.year, now.month + 1, 0);
+  final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
 
   final expenseRepo = ref.watch(expenseRepositoryProvider);
   return expenseRepo.getTotalAmount(
